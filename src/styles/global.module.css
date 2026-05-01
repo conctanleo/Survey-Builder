@@ -14,3 +14,11 @@ html, body, #root {
 body {
   background: #4f46e5;
 }
+
+html {
+  overscroll-behavior: none;
+}
+
+button, [role="button"], [role="radio"], [role="checkbox"] {
+  min-height: 44px;
+}
