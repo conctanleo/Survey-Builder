@@ -1,0 +1,23 @@
+.button {
+  width: 100%;
+  padding: 16px;
+  border: none;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+}
+.button:active { transform: scale(0.98); }
+.solid {
+  background: white;
+  color: #4f46e5;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+.ghost {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
