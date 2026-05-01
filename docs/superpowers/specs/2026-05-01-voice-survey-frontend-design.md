@@ -135,16 +135,16 @@ src/
 │   └── Complete/             # 页面4: 提交完成
 ├── components/
 │   ├── layout/
-│   │   ├── GradientBackground.vue   # 渐变背景容器
-│   │   ├── GlassCard.vue            # 毛玻璃卡片
-│   │   └── ProgressBar.vue          # 顶部进度条
+│   │   ├── GradientBackground.jsx   # 渐变背景容器
+│   │   ├── GlassCard.jsx            # 毛玻璃卡片
+│   │   └── ProgressBar.jsx          # 顶部进度条
 │   ├── question/
-│   │   ├── VoiceRecorder.vue        # 语音录音组件（核心）
-│   │   ├── ChoiceQuestion.vue       # 单选/多选题
-│   │   └── TextQuestion.vue         # 文字填空题
+│   │   ├── VoiceRecorder.jsx        # 语音录音组件（核心）
+│   │   ├── ChoiceQuestion.jsx       # 单选/多选题
+│   │   └── TextQuestion.jsx         # 文字填空题
 │   └── common/
-│       ├── PrimaryButton.vue        # CTA 按钮
-│       └── NavigationBar.vue        # 底部上下题导航
+│       ├── PrimaryButton.jsx        # CTA 按钮
+│       └── NavigationBar.jsx        # 底部上下题导航
 ├── hooks/
 │   └── useAudioRecorder.js          # 录音逻辑 hook
 ├── stores/
