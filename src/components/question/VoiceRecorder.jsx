@@ -87,6 +87,14 @@ export default function VoiceRecorder({ onComplete, onReset }) {
       {recorder.error === 'permission' && (
         <p className={styles.error}>请允许麦克风权限以使用语音功能</p>
       )}
+      {recorder.error === 'https_required' && (
+        <p className={styles.error}>
+          语音功能需要 HTTPS 安全连接，请在浏览器中打开此链接
+        </p>
+      )}
+      {recorder.error && recorder.error !== 'permission' && recorder.error !== 'https_required' && (
+        <p className={styles.error}>录音功能不可用：{recorder.error}</p>
+      )}
     </div>
   );
 }

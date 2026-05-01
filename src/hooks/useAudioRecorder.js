@@ -2,12 +2,26 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 
 const MAX_DURATION_MS = 5 * 60 * 1000;
 
+function getSupportedMimeType() {
+  const types = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/ogg;codecs=opus',
+  ];
+  for (const type of types) {
+    if (MediaRecorder.isTypeSupported(type)) return type;
+  }
+  return '';
+}
+
 export default function useAudioRecorder() {
   const [status, setStatus] = useState('idle');
   const [duration, setDuration] = useState(0);
   const [blob, setBlob] = useState(null);
   const [error, setError] = useState(null);
   const [analyserData, setAnalyserData] = useState(new Uint8Array(0));
+  const [mimeType, setMimeType] = useState('');
 
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
@@ -23,8 +37,12 @@ export default function useAudioRecorder() {
     }
   }, []);
 
-  const startAnalyser = useCallback((stream) => {
-    const audioContext = new AudioContext();
+  const startAnalyser = useCallback(async (stream) => {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    // iOS requires resume() within user gesture
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume();
+    }
     const source = audioContext.createMediaStreamSource(stream);
     const analyser = audioContext.createAnalyser();
     analyser.fftSize = 64;
@@ -43,10 +61,19 @@ export default function useAudioRecorder() {
   const start = useCallback(async () => {
     try {
       setError(null);
+
+      // Check HTTPS (getUserMedia requires secure context)
+      if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+        setError('https_required');
+        setStatus('idle');
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      const recorder = new MediaRecorder(stream);
+      const detectedMimeType = getSupportedMimeType();
+      const recorder = new MediaRecorder(stream, detectedMimeType ? { mimeType: detectedMimeType } : undefined);
       mediaRecorderRef.current = recorder;
       chunksRef.current = [];
 
@@ -55,7 +82,8 @@ export default function useAudioRecorder() {
       };
 
       recorder.onstop = () => {
-        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const actualMime = recorder.mimeType || 'audio/webm';
+        const audioBlob = new Blob(chunksRef.current, { type: actualMime });
         setBlob(audioBlob);
         setStatus('completed');
         stopAnalyser();
@@ -63,10 +91,11 @@ export default function useAudioRecorder() {
       };
 
       recorder.start(100);
+      setMimeType(recorder.mimeType || detectedMimeType || 'audio/webm');
       setStatus('recording');
       setDuration(0);
       setBlob(null);
-      startAnalyser(stream);
+      await startAnalyser(stream);
 
       const startTime = Date.now();
       timerRef.current = setInterval(() => {
@@ -107,5 +136,5 @@ export default function useAudioRecorder() {
     };
   }, [stop, stopAnalyser]);
 
-  return { status, duration, blob, error, analyserData, start, stop, reset };
+  return { status, duration, blob, error, analyserData, mimeType, start, stop, reset };
 }
