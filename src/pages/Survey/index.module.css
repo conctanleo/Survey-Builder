@@ -1,0 +1,12 @@
+.questionArea { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.questionTitle { font-size: 20px; font-weight: 600; text-align: center; line-height: 1.5; margin: 0 0 32px; color: white; }
+.questionNumber { font-size: 12px; color: rgba(255,255,255,0.5); margin: 0 0 8px; }
+.scrollTitle { font-size: 20px; font-weight: 700; color: white; margin: 0 0 24px; }
+.scrollList { flex: 1; overflow-y: auto; }
+.scrollItem { margin-bottom: 40px; }
+.scrollItem .questionTitle { font-size: 17px; margin-bottom: 16px; }
+.submitBtn {
+  width: 100%; padding: 16px; border: none; border-radius: 14px;
+  background: white; color: #4f46e5; font-size: 16px; font-weight: 700;
+  cursor: pointer; box-shadow: 0 4px 20px rgba(0,0,0,0.15); flex-shrink: 0;
+}
