@@ -1,0 +1,35 @@
+.container { display: flex; flex-direction: column; align-items: center; }
+.button {
+  position: relative; width: 96px; height: 96px; border-radius: 50%;
+  border: none; cursor: pointer; display: flex; align-items: center;
+  justify-content: center; z-index: 1; transition: transform 0.2s;
+}
+.button:active { transform: scale(0.95); }
+.idle {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  box-shadow: 0 6px 24px rgba(102, 126, 234, 0.4);
+}
+.recording {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  box-shadow: 0 6px 24px rgba(239, 68, 68, 0.4);
+}
+.completed {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  box-shadow: 0 6px 24px rgba(34, 197, 94, 0.4);
+}
+.icon { position: relative; z-index: 1; }
+.pulse1, .pulse2 {
+  position: absolute; inset: -12px; border-radius: 50%;
+  background: rgba(239, 68, 68, 0.15);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+.pulse2 { inset: -6px; background: rgba(239, 68, 68, 0.1); animation-delay: 0.3s; }
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.15); opacity: 0.5; }
+}
+.statusText { font-size: 14px; color: rgba(255,255,255,0.8); margin: 16px 0 8px; }
+.timer { font-size: 22px; font-weight: 700; color: white; margin: 0; }
+.waveform { display: flex; align-items: center; gap: 3px; margin-top: 20px; height: 32px; }
+.bar { width: 3px; background: rgba(255,255,255,0.6); border-radius: 2px; transition: height 0.1s ease; }
+.error { font-size: 13px; color: #fca5a5; margin-top: 12px; text-align: center; }
