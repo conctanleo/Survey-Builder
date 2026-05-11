@@ -9,6 +9,7 @@ const useSurveyStore = create((set, get) => ({
   answers: {},
   recordingBlobs: {},
   recordingDurations: {},
+  submissionId: null,
   currentIndex: 0,
   startTime: null,
 
@@ -35,6 +36,8 @@ const useSurveyStore = create((set, get) => ({
     recordingDurations: { ...state.recordingDurations, [questionId]: seconds },
   })),
 
+  setSubmissionId: (id) => set({ submissionId: id }),
+
   setCurrentIndex: (index) => set({ currentIndex: index }),
   nextQuestion: () => set((state) => ({
     currentIndex: Math.min(state.currentIndex + 1, state.questions.length - 1),
@@ -59,7 +62,7 @@ const useSurveyStore = create((set, get) => ({
   reset: () => set({
     surveyId: null, surveyConfig: null, questions: [], infoFields: [],
     userInfo: {}, answers: {}, recordingBlobs: {}, recordingDurations: {},
-    currentIndex: 0, startTime: null,
+    submissionId: null, currentIndex: 0, startTime: null,
   }),
 }));
 

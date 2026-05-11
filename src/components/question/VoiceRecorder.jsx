@@ -1,11 +1,24 @@
 import { useMemo, useRef, useEffect } from 'react';
 import { CheckCircleOutlined } from '@ant-design/icons';
 import useAudioRecorder from '../../hooks/useAudioRecorder';
+import useSurveyStore from '../../stores/surveyStore';
 import styles from './VoiceRecorder.module.css';
 
-export default function VoiceRecorder({ onComplete, onReset }) {
+export default function VoiceRecorder({ questionId, onComplete, onReset }) {
   const recorder = useAudioRecorder();
   const notifiedRef = useRef(false);
+
+  // 从 store 获取该题目的录音状态
+  const recordingBlob = useSurveyStore((s) => s.recordingBlobs[questionId]);
+  const recordingDuration = useSurveyStore((s) => s.recordingDurations[questionId]);
+
+  // 如果 store 中已有录音，直接显示完成状态
+  useEffect(() => {
+    if (recordingBlob && recorder.status === 'idle') {
+      // 设置内部状态为已完成，显示之前的录音
+      recorder.setCompletedState(recordingBlob, recordingDuration || 0);
+    }
+  }, [recordingBlob, recordingDuration]);
 
   const handleClick = () => {
     if (recorder.status === 'idle') {

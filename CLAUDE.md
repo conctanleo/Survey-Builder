@@ -1,41 +1,46 @@
 # Voice Survey Web App (语音问卷)
 
-## 项目概述
-
-面向学术研究场景的语音问卷 Web App。用户通过扫码进入问卷，填写个人信息后，以语音录音、选择或文字方式回答问题。前端已完成，后端待开发。
+面向学术研究场景的语音问卷 Web App。用户扫码进入，填写信息后以语音/选择/文字方式答题。
 
 ## 技术栈
 
 - **前端**：React 19 + Vite 8 + Ant Design 5 + Zustand 5 + Axios
-- **构建**：`npm run dev`（开发）、`npm run build`（生产）
-- **环境变量**：`VITE_API_BASE_URL`（后端地址，不设置则使用 mock 数据）
+- **后端**：Express 4 + better-sqlite3 + multer（文件上传）+ qrcode（二维码生成）
+- **数据库**：SQLite（`backend/data/surveys.db`），WAL 模式
 
 ## 项目结构
 
 ```
-src/
-├── App.jsx                     # 路由定义 + SurveyLoader（首次加载拉取问卷数据）
-├── main.jsx                    # 入口，ConfigProvider 包裹
+src/                            # 前端
 ├── api/
 │   ├── client.js               # Axios 实例，baseURL = VITE_API_BASE_URL || '/api'
 │   ├── mock.js                 # Mock 问卷数据（8 题：3 语音 + 4 选择 + 1 填空）
-│   └── survey.js               # 3 个 API 函数（fetchSurvey, submitSurvey, uploadRecording）
-├── hooks/
-│   └── useAudioRecorder.js     # 录音 hook：MediaRecorder 状态机 + 波形 + 计时
-├── stores/
-│   └── surveyStore.js          # Zustand 全局状态
+│   └── survey.js               # fetchSurvey, submitSurvey, uploadRecording
+├── hooks/useAudioRecorder.js   # MediaRecorder 状态机 + 波形 + 计时
+├── stores/surveyStore.js       # Zustand 全局状态
 ├── pages/
 │   ├── InfoCollection/         # 页面 1：采集用户信息
-│   ├── Welcome/                # 页面 2：问卷欢迎（绿色背景）
-│   ├── Survey/                 # 页面 3：答题（紫色背景，核心页面）
+│   ├── Welcome/                # 页面 2：问卷欢迎
+│   ├── Survey/                 # 页面 3：答题（核心页面）
 │   └── Complete/               # 页面 4：提交完成
-├── components/
-│   ├── layout/                 # GradientBackground, GlassCard, ProgressBar
-│   ├── common/                 # PrimaryButton, NavigationBar
-│   └── question/               # VoiceRecorder, ChoiceQuestion, TextQuestion
-└── styles/
-    ├── theme.js                # Ant Design 主题 Token
-    └── global.module.css       # 全局样式
+└── components/
+    ├── layout/                 # GradientBackground, GlassCard, ProgressBar
+    ├── common/                 # PrimaryButton, NavigationBar
+    └── question/               # VoiceRecorder, ChoiceQuestion, TextQuestion
+
+backend/
+├── src/
+│   ├── index.js                # Express 入口，端口 3000
+│   ├── routes/surveys.js       # API 路由定义
+│   ├── controllers/surveyController.js  # 业务逻辑
+│   ├── models/db.js            # SQLite 连接 + 建表
+│   ├── middleware/upload.js    # multer（内存模式，10MB 限制，仅 audio/*）
+│   ├── middleware/errorHandler.js       # 统一错误处理
+│   └── admin.js                # 管理后台（端口 3001）：问卷列表 + 二维码生成 + 提交/录音查看
+├── scripts/init-db.js          # 初始化示例问卷数据
+└── data/
+    ├── surveys.db              # SQLite 数据库
+    └── recordings/             # 录音文件存储目录
 ```
 
 ## 页面路由
@@ -47,135 +52,63 @@ src/
 /:surveyId/complete     → Complete（完成页）
 ```
 
-## 后端需要实现的 API
+## API 接口
 
-### 1. 获取问卷配置
+### GET /api/surveys/:surveyId — 获取问卷配置
 
-```
-GET /api/surveys/{surveyId}
-```
+响应：`{ surveyId, config: { title, description, questionCount, estimatedMinutes, displayMode }, infoFields: [{ id, label, type, required, placeholder }], questions: [{ id, type, title, required, ... }] }`
 
-**响应体：**
-```json
-{
-  "surveyId": "demo-survey-001",
-  "config": {
-    "title": "工作环境满意度调查",
-    "description": "本问卷旨在了解...",
-    "questionCount": 8,
-    "estimatedMinutes": 5,
-    "displayMode": "paged"
-  },
-  "infoFields": [
-    { "id": "name", "label": "姓名", "type": "text", "required": true, "placeholder": "请输入您的姓名" },
-    { "id": "phone", "label": "手机号", "type": "tel", "required": true, "placeholder": "请输入手机号" }
-  ],
-  "questions": [
-    { "id": "q1", "type": "voice", "title": "请描述...", "required": true, "maxLength": 300 },
-    { "id": "q2", "type": "choice", "title": "您的性别", "required": true, "multiple": false, "options": ["男", "女"] },
-    { "id": "q3", "type": "text", "title": "建议", "required": false, "maxLength": 500, "placeholder": "请输入" }
-  ]
-}
-```
+- `displayMode`：`"paged"`（单题分页）/ `"scroll"`（连续滚动）
+- `questions[].type`：`"voice"` / `"choice"` / `"text"`
+- `choice` 题有 `multiple`（布尔）和 `options`（字符串数组）
 
-**字段说明：**
-- `displayMode`：`"paged"`（单题分页）或 `"scroll"`（连续滚动）
-- `infoFields[].type`：`"text"` 或 `"tel"`
-- `questions[].type`：`"voice"`（语音录音）、`"choice"`（选择）、`"text"`（填空）
-- `questions[].multiple`：仅 choice 类型，`true` 为多选
+### POST /api/surveys/:surveyId/recordings/:questionId — 上传录音
 
-### 2. 上传录音文件
+- Content-Type: `multipart/form-data`，字段名 `recording`
+- 请求头 `X-Submission-Id` 关联录音与提交（未提供则生成临时 ID）
+- 后端根据 `Content-Type` 判断格式，自动选择扩展名（webm/m4a/ogg）
+- 文件存储在 `data/recordings/{surveyId}/{submissionId}/{questionId}.{ext}`
+
+### POST /api/surveys/:surveyId/submit — 提交问卷
+
+请求体：`{ userInfo, answers, recordingDurations, submissionId? }`
+
+- `voice` 题答案为 `true`（实际音频通过录音接口单独上传）
+- `choice` 单选：`string`，多选：`string[]`
+- `text` 题：`string`
+- `recordingDurations`：`{ questionId: 秒数 }`
+- `submissionId`：若前端录音时获得过 submissionId，传入以关联已有录音
+
+## 数据库 Schema
 
 ```
-POST /api/surveys/{surveyId}/recordings/{questionId}
-Content-Type: multipart/form-data
+surveys      (survey_id PK, config JSON, info_fields JSON, questions JSON, created_at)
+submissions  (submission_id PK, survey_id FK, user_info JSON, answers JSON, recording_durations JSON, submitted_at)
+recordings   (id PK, submission_id FK, question_id, file_path, mime_type, duration, file_size, UNIQUE(submission_id, question_id))
 ```
 
-**请求体：** FormData，字段名 `recording`，文件名为 `{questionId}.webm`
+## 管理后台（端口 3001）
 
-**注意事项：**
-- 文件名虽然是 `.webm`，但实际 MIME 类型可能是以下之一：
-  - `audio/webm;codecs=opus`（Android Chrome / Android 微信）
-  - `audio/mp4`（iOS Safari / iOS 微信）
-  - `audio/ogg;codecs=opus`（Firefox）
-- 后端应根据 `Content-Type` 头判断实际格式，而非依赖文件扩展名
-- 每题录音最大 5 分钟，约 1MB/分钟（Opus 128kbps）
-
-**响应体：**
-```json
-{ "success": true }
-```
-
-### 3. 提交问卷答案
-
-```
-POST /api/surveys/{surveyId}/submit
-Content-Type: application/json
-```
-
-**请求体：**
-```json
-{
-  "userInfo": { "name": "张三", "phone": "13800138000", "department": "XX学院" },
-  "answers": {
-    "q1": true,
-    "q2": "男",
-    "q3": true,
-    "q4": "3-5年",
-    "q5": "比较满意",
-    "q6": "建议内容...",
-    "q7": ["弹性工作时间", "培训机会"],
-    "q8": true
-  },
-  "recordingDurations": {
-    "q1": 45,
-    "q3": 120,
-    "q8": 30
-  }
-}
-```
-
-**答案值类型说明：**
-- `voice` 题：`true`（表示已录音，实际音频通过 uploadRecording 单独上传）
-- `choice` 单选：`string`（选项文本）
-- `choice` 多选：`string[]`（选项文本数组）
-- `text` 题：`string`（文本内容）
-- `recordingDurations`：录音时长（秒），与 voice 题对应
-
-**响应体：**
-```json
-{ "success": true }
-```
-
-## 前端待完成的后端集成点
-
-> **重要：** `submitSurvey` 和 `uploadRecording` 已在 `src/api/survey.js` 中定义，但尚未在任何组件中调用。需要补充：
-
-1. **录音上传时机**：每题录音完成后异步调用 `uploadRecording()`，不阻塞答题
-2. **最终提交**：在 Survey 页面最后一题点"下一题"时（即跳转 Complete 页面前），调用 `submitSurvey()` 提交答案
-3. **Complete 页面数据来源**：当前从 Zustand store 读取统计数据，提交后应改为从后端响应获取
+- 问卷列表：显示所有问卷，支持一键生成二维码
+- 二维码生成：`GET /api/qrcode/:surveyId?host=...` 返回 PNG 图片，可自定义 host 地址
+- 提交记录 + 录音文件查看
+- 启动：`node backend/src/admin.js`
 
 ## 录音兼容性
 
-| 平台 | getUserMedia | MediaRecorder | 音频格式 |
-|------|:---:|:---:|------|
-| Android Chrome | ✅ | ✅ | WebM/Opus |
-| Android 微信 (X5) | ✅ | ✅ | WebM/Opus |
-| iOS Safari (14.5+) | ✅ | ✅ | MP4/AAC |
-| iOS 微信 (WebKit) | ✅ | ✅ | MP4/AAC |
-
-- `useAudioRecorder` 通过 `getSupportedMimeType()` 自动探测格式
-- 录音需要 HTTPS 环境（localhost 开发除外）
-- iOS 的 AudioContext 需在用户手势中 `resume()`
+- Android Chrome/微信：WebM/Opus | iOS Safari/微信：MP4/AAC | Firefox：OGG/Opus
+- `useAudioRecorder` 通过 `getSupportedMimeType()` 自动探测
+- 需要 HTTPS（localhost 除外），iOS 需用户手势中 `resume()` AudioContext
 
 ## 开发调试
 
 ```bash
-npm run dev                    # 启动开发服务器（localhost:5173）
-npm run build                  # 生产构建
-```
+# 前端
+npm run dev                              # localhost:5173，不带 VITE_API_BASE_URL 使用 mock 数据
+VITE_API_BASE_URL=http://localhost:3000/api npm run dev  # 联调模式
 
-不带 `VITE_API_BASE_URL` 时前端使用 mock 数据，可直接开发调试。联调时设置：
-```bash
-VITE_API_BASE_URL=http://localhost:3000/api npm run dev
+# 后端
+cd backend && npm run dev                # 主服务 localhost:3000
+cd backend && node scripts/init-db.js    # 初始化示例问卷
+node backend/src/admin.js                # 管理后台 localhost:3001（查看提交记录和录音）
 ```

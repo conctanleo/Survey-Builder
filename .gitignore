@@ -5,4 +5,17 @@ dist
 .superpowers/
 .playwright-mcp/
 *.png
-.worktrees/
+.claude/worktrees/
+
+# Environment
+.env*
+!.env.example
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# Recordings
+data/recordings/
+backend/data/recordings/

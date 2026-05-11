@@ -128,6 +128,13 @@ export default function useAudioRecorder() {
     setAnalyserData(new Uint8Array(0));
   }, [stop]);
 
+  // 设置已完成状态（用于从 store 恢复已有录音）
+  const setCompletedState = useCallback((existingBlob, existingDuration) => {
+    setBlob(existingBlob);
+    setDuration(existingDuration);
+    setStatus('completed');
+  }, []);
+
   useEffect(() => {
     return () => {
       stop();
@@ -136,5 +143,5 @@ export default function useAudioRecorder() {
     };
   }, [stop, stopAnalyser]);
 
-  return { status, duration, blob, error, analyserData, mimeType, start, stop, reset };
+  return { status, duration, blob, error, analyserData, mimeType, start, stop, reset, setCompletedState };
 }

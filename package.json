@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:server": "cd backend && npm start",
+    "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
+    "init-db": "cd backend && npm install && node scripts/init-db.js",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -20,9 +23,11 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.59.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "concurrently": "^8.2.2",
     "eslint": "^10.2.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",

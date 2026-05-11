@@ -10,6 +10,7 @@ export async function fetchSurvey(surveyId) {
 }
 
 export async function submitSurvey(surveyId, payload) {
+  console.log('[API] submitSurvey called with payload:', JSON.stringify(payload));
   if (USE_MOCK) { console.log('Mock submit:', surveyId, payload); return { success: true }; }
   const { data } = await client.post(`/surveys/${surveyId}/submit`, payload);
   return data;
