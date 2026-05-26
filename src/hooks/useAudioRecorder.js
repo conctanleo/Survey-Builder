@@ -30,6 +30,7 @@ export default function useAudioRecorder() {
   const analyserRef = useRef(null);
   const animFrameRef = useRef(null);
   const audioContextRef = useRef(null);
+  const startingRef = useRef(false);
 
   const stopAnalyser = useCallback(() => {
     if (animFrameRef.current) {
@@ -42,13 +43,7 @@ export default function useAudioRecorder() {
     }
   }, []);
 
-  const startAnalyser = useCallback(async (stream) => {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    audioContextRef.current = audioContext;
-    // iOS requires resume() within user gesture
-    if (audioContext.state === 'suspended') {
-      await audioContext.resume();
-    }
+  const startAnalyser = useCallback((audioContext, stream) => {
     const source = audioContext.createMediaStreamSource(stream);
     const analyser = audioContext.createAnalyser();
     analyser.fftSize = 64;
@@ -65,6 +60,7 @@ export default function useAudioRecorder() {
   }, []);
 
   const start = useCallback(async () => {
+    if (startingRef.current) return;
     try {
       setError(null);
 
@@ -88,11 +84,14 @@ export default function useAudioRecorder() {
       const audioTrack = stream.getAudioTracks()[0];
       console.log('[AudioRecorder] Mic:', audioTrack?.label, 'Settings:', audioTrack?.getSettings());
 
+      // Create a single AudioContext for both mic check and waveform analyser
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      audioContextRef.current = audioContext;
+      if (audioContext.state === 'suspended') await audioContext.resume();
+
       // Check mic volume for 1 second before starting recorder
-      const checkCtx = new AudioContext();
-      if (checkCtx.state === 'suspended') await checkCtx.resume();
-      const checkSource = checkCtx.createMediaStreamSource(stream);
-      const checkAnalyser = checkCtx.createAnalyser();
+      const checkSource = audioContext.createMediaStreamSource(stream);
+      const checkAnalyser = audioContext.createAnalyser();
       checkAnalyser.fftSize = 2048;
       checkSource.connect(checkAnalyser);
 
@@ -102,13 +101,14 @@ export default function useAudioRecorder() {
       const peak = Math.max(...checkData.map(Math.abs));
       checkSource.disconnect();
       checkAnalyser.disconnect();
-      checkCtx.close();
 
       console.log('[AudioRecorder] Mic check peak level:', peak.toFixed(4), peak < 0.01 ? '(SILENT!)' : '(OK)');
 
       if (peak < 0.01) {
         setError('mic_silent');
         stream.getTracks().forEach(t => t.stop());
+        audioContext.close();
+        audioContextRef.current = null;
         setStatus('idle');
         return;
       }
@@ -136,7 +136,7 @@ export default function useAudioRecorder() {
       setStatus('recording');
       setDuration(0);
       setBlob(null);
-      await startAnalyser(stream);
+      startAnalyser(audioContext, stream);
 
       const startTime = Date.now();
       timerRef.current = setInterval(() => {
@@ -147,6 +147,8 @@ export default function useAudioRecorder() {
     } catch (err) {
       setError(err.name === 'NotAllowedError' ? 'permission' : err.message);
       setStatus('idle');
+    } finally {
+      startingRef.current = false;
     }
   }, [startAnalyser, stopAnalyser]);
 

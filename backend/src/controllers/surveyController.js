@@ -57,7 +57,7 @@ export async function uploadRecording(req, res, next) {
 
     const fileName = `${questionId}.${ext}`;
     const filePath = path.join(recordingsDir, fileName);
-    fs.writeFileSync(filePath, file.buffer);
+    await fs.promises.writeFile(filePath, file.buffer);
 
     const relativePath = `recordings/${surveyId}/${submissionId}/${fileName}`;
 
@@ -82,7 +82,7 @@ export async function uploadRecording(req, res, next) {
       upsertStmt.run(submissionId, questionId, relativePath, file.mimetype, file.size);
     } catch (dbErr) {
       // DB 写入失败时清理已写入的文件
-      try { fs.unlinkSync(filePath); } catch (_) { /* ignore cleanup error */ }
+      try { await fs.promises.unlink(filePath); } catch (_) { /* ignore cleanup error */ }
       throw dbErr;
     }
 
