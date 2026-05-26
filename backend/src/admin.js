@@ -104,6 +104,8 @@ app.delete('/api/surveys/:surveyId', (req, res) => {
   const row = db.prepare('SELECT 1 FROM surveys WHERE survey_id = ?').get(req.params.surveyId);
   if (!row) return res.status(404).json({ error: '问卷不存在' });
 
+  const surveyDir = path.join(__dirname, '../../data/recordings', req.params.surveyId);
+
   const deleteSurvey = db.transaction((surveyId) => {
     const submissionIds = db.prepare('SELECT submission_id FROM submissions WHERE survey_id = ?')
       .all(surveyId).map(s => s.submission_id);
@@ -119,6 +121,16 @@ app.delete('/api/surveys/:surveyId', (req, res) => {
   });
 
   deleteSurvey(req.params.surveyId);
+
+  // 清理磁盘上的录音文件
+  try {
+    if (fs.existsSync(surveyDir)) {
+      fs.rmSync(surveyDir, { recursive: true, force: true });
+    }
+  } catch (err) {
+    console.error('Failed to clean recording files:', err.message);
+  }
+
   res.json({ success: true });
 });
 
