@@ -15,10 +15,9 @@ export default function VoiceRecorder({ questionId, onComplete, onReset }) {
   // 如果 store 中已有录音，直接显示完成状态
   useEffect(() => {
     if (recordingBlob && recorder.status === 'idle') {
-      // 设置内部状态为已完成，显示之前的录音
       recorder.setCompletedState(recordingBlob, recordingDuration || 0);
     }
-  }, [recordingBlob, recordingDuration]);
+  }, [recordingBlob, recordingDuration, recorder.status, recorder.setCompletedState]);
 
   const handleClick = () => {
     if (recorder.status === 'idle') {
@@ -105,7 +104,15 @@ export default function VoiceRecorder({ questionId, onComplete, onReset }) {
           语音功能需要 HTTPS 安全连接，请在浏览器中打开此链接
         </p>
       )}
-      {recorder.error && recorder.error !== 'permission' && recorder.error !== 'https_required' && (
+      {recorder.error === 'mic_silent' && (
+        <p className={styles.error}>
+          麦克风未检测到声音。请检查：<br />
+          1. Windows 设置 → 隐私 → 麦克风 → 允许应用访问<br />
+          2. 麦克风是否已静音或音量为零<br />
+          3. 浏览器地址栏左侧 → 网站设置 → 麦克风 → 选择正确设备
+        </p>
+      )}
+      {recorder.error && recorder.error !== 'permission' && recorder.error !== 'https_required' && recorder.error !== 'mic_silent' && (
         <p className={styles.error}>录音功能不可用：{recorder.error}</p>
       )}
     </div>

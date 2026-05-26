@@ -12,7 +12,7 @@ import db from './models/db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-const PORT = 3001;
+const PORT = process.env.ADMIN_PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
@@ -47,6 +47,9 @@ app.post('/api/surveys', (req, res) => {
   const { surveyId, config, infoFields, questions } = req.body;
   if (!surveyId || !config || !config.title || !Array.isArray(questions) || questions.length === 0) {
     return res.status(400).json({ error: '缺少必填字段：surveyId、config.title、questions' });
+  }
+  if (!/^[a-zA-Z0-9_-]+$/.test(surveyId)) {
+    return res.status(400).json({ error: '问卷 ID 只能包含英文、数字、下划线和中划线' });
   }
   const exists = db.prepare('SELECT 1 FROM surveys WHERE survey_id = ?').get(surveyId);
   if (exists) return res.status(409).json({ error: '问卷 ID 已存在' });
@@ -101,16 +104,21 @@ app.delete('/api/surveys/:surveyId', (req, res) => {
   const row = db.prepare('SELECT 1 FROM surveys WHERE survey_id = ?').get(req.params.surveyId);
   if (!row) return res.status(404).json({ error: '问卷不存在' });
 
-  const submissionIds = db.prepare('SELECT submission_id FROM submissions WHERE survey_id = ?')
-    .all(req.params.surveyId).map(s => s.submission_id);
+  const deleteSurvey = db.transaction((surveyId) => {
+    const submissionIds = db.prepare('SELECT submission_id FROM submissions WHERE survey_id = ?')
+      .all(surveyId).map(s => s.submission_id);
 
-  if (submissionIds.length > 0) {
-    const placeholders = submissionIds.map(() => '?').join(',');
-    db.prepare(`DELETE FROM recordings WHERE submission_id IN (${placeholders})`).run(...submissionIds);
-    db.prepare('DELETE FROM submissions WHERE survey_id = ?').run(req.params.surveyId);
-  }
+    if (submissionIds.length > 0) {
+      const placeholders = submissionIds.map(() => '?').join(',');
+      db.prepare(`DELETE FROM transcription_queue WHERE submission_id IN (${placeholders})`).run(...submissionIds);
+      db.prepare(`DELETE FROM recordings WHERE submission_id IN (${placeholders})`).run(...submissionIds);
+      db.prepare('DELETE FROM submissions WHERE survey_id = ?').run(surveyId);
+    }
 
-  db.prepare('DELETE FROM surveys WHERE survey_id = ?').run(req.params.surveyId);
+    db.prepare('DELETE FROM surveys WHERE survey_id = ?').run(surveyId);
+  });
+
+  deleteSurvey(req.params.surveyId);
   res.json({ success: true });
 });
 
@@ -218,7 +226,14 @@ app.get('/api/export/:surveyId', (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="${zipFilename}"`);
 
   const archive = archiver('zip', { zlib: { level: 5 } });
-  archive.on('error', (err) => { res.status(500).json({ error: err.message }); });
+  archive.on('error', (err) => {
+    console.error('Archive error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.end();
+    }
+  });
   archive.pipe(res);
 
   // --- Build CSV ---
@@ -545,14 +560,14 @@ function startTranscriptionPoller() {
   }, 2000);
 }
 
-// 启动
-startSttService();
-startTranscriptionPoller();
+// 启动（STT 服务暂未启用，需要 llama-cpp-python 和 ffmpeg）
+// startSttService();
+// startTranscriptionPoller();
 
 // 优雅关闭
-process.on('exit', stopSttService);
-process.on('SIGINT', () => { stopSttService(); process.exit(); });
-process.on('SIGTERM', () => { stopSttService(); process.exit(); });
+// process.on('exit', stopSttService);
+// process.on('SIGINT', () => { stopSttService(); process.exit(); });
+// process.on('SIGTERM', () => { stopSttService(); process.exit(); });
 
 // ── 管理页面 ──
 
@@ -875,7 +890,6 @@ app.get('/', (req, res) => {
             '<button class="btn btn-ghost btn-sm" onclick="showDetail(\\'' + esc(s.surveyId) + '\\')">详情</button>' +
             '<button class="btn btn-ghost btn-sm" onclick="showQR(\\'' + esc(s.surveyId) + '\\', \\'' + esc(s.config.title).replace(/'/g, "\\\\'") + '\\')">二维码</button>' +
             '<button class="btn btn-success btn-sm" onclick="exportSurvey(\\'' + esc(s.surveyId) + '\\')">导出</button>' +
-            '<button class="btn btn-primary btn-sm" onclick="openTranscribeModal(\\'' + esc(s.surveyId) + '\\', \\'' + esc(s.config.title).replace(/'/g, "\\\\'") + '\\')">转录</button>' +
             '<button class="btn btn-danger btn-sm" onclick="deleteSurvey(\\'' + esc(s.surveyId) + '\\')">删除</button>' +
             '</div></div>';
         });

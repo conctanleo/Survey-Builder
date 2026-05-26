@@ -16,6 +16,7 @@ const db = new Database(dbPath);
 
 // 启用外键约束
 db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
 
 // 创建表
 db.exec(`

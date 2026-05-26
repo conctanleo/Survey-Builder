@@ -42,6 +42,9 @@ export async function uploadRecording(req, res, next) {
     }
 
     let submissionId = req.headers['x-submission-id'];
+    if (submissionId && /[/\\]/.test(submissionId)) {
+      return res.status(400).json({ error: '无效的 submission ID' });
+    }
     if (!submissionId) {
       submissionId = `temp_${uuidv4()}`;
     }
@@ -61,23 +64,27 @@ export async function uploadRecording(req, res, next) {
     const checkStmt = db.prepare('SELECT submission_id FROM submissions WHERE submission_id = ?');
     const existing = checkStmt.get(submissionId);
 
-    if (!existing) {
-      const insertStmt = db.prepare(`
-        INSERT INTO submissions (submission_id, survey_id, user_info, answers)
+    try {
+      // INSERT OR IGNORE 防止并发上传时 UNIQUE 约束错误
+      db.prepare(`
+        INSERT OR IGNORE INTO submissions (submission_id, survey_id, user_info, answers)
         VALUES (?, ?, '{}', '{}')
-      `);
-      insertStmt.run(submissionId, surveyId);
-    }
+      `).run(submissionId, surveyId);
 
-    const upsertStmt = db.prepare(`
-      INSERT INTO recordings (submission_id, question_id, file_path, mime_type, file_size)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(submission_id, question_id) DO UPDATE SET
-        file_path = excluded.file_path,
-        mime_type = excluded.mime_type,
-        file_size = excluded.file_size
-    `);
-    upsertStmt.run(submissionId, questionId, relativePath, file.mimetype, file.size);
+      const upsertStmt = db.prepare(`
+        INSERT INTO recordings (submission_id, question_id, file_path, mime_type, file_size)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(submission_id, question_id) DO UPDATE SET
+          file_path = excluded.file_path,
+          mime_type = excluded.mime_type,
+          file_size = excluded.file_size
+      `);
+      upsertStmt.run(submissionId, questionId, relativePath, file.mimetype, file.size);
+    } catch (dbErr) {
+      // DB 写入失败时清理已写入的文件
+      try { fs.unlinkSync(filePath); } catch (_) { /* ignore cleanup error */ }
+      throw dbErr;
+    }
 
     res.json({ success: true, submissionId });
   } catch (err) {

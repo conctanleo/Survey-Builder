@@ -29,16 +29,22 @@ export default function useAudioRecorder() {
   const timerRef = useRef(null);
   const analyserRef = useRef(null);
   const animFrameRef = useRef(null);
+  const audioContextRef = useRef(null);
 
   const stopAnalyser = useCallback(() => {
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
     }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
   }, []);
 
   const startAnalyser = useCallback(async (stream) => {
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    audioContextRef.current = audioContext;
     // iOS requires resume() within user gesture
     if (audioContext.state === 'suspended') {
       await audioContext.resume();
@@ -69,8 +75,43 @@ export default function useAudioRecorder() {
         return;
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       streamRef.current = stream;
+
+      // Diagnostic: log selected mic device
+      const audioTrack = stream.getAudioTracks()[0];
+      console.log('[AudioRecorder] Mic:', audioTrack?.label, 'Settings:', audioTrack?.getSettings());
+
+      // Check mic volume for 1 second before starting recorder
+      const checkCtx = new AudioContext();
+      if (checkCtx.state === 'suspended') await checkCtx.resume();
+      const checkSource = checkCtx.createMediaStreamSource(stream);
+      const checkAnalyser = checkCtx.createAnalyser();
+      checkAnalyser.fftSize = 2048;
+      checkSource.connect(checkAnalyser);
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const checkData = new Float32Array(checkAnalyser.fftSize);
+      checkAnalyser.getFloatTimeDomainData(checkData);
+      const peak = Math.max(...checkData.map(Math.abs));
+      checkSource.disconnect();
+      checkAnalyser.disconnect();
+      checkCtx.close();
+
+      console.log('[AudioRecorder] Mic check peak level:', peak.toFixed(4), peak < 0.01 ? '(SILENT!)' : '(OK)');
+
+      if (peak < 0.01) {
+        setError('mic_silent');
+        stream.getTracks().forEach(t => t.stop());
+        setStatus('idle');
+        return;
+      }
 
       const detectedMimeType = getSupportedMimeType();
       const recorder = new MediaRecorder(stream, detectedMimeType ? { mimeType: detectedMimeType } : undefined);

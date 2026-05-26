@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import { Spin } from 'antd';
 import useSurveyStore from './stores/surveyStore';
@@ -9,16 +9,18 @@ import Survey from './pages/Survey';
 import Complete from './pages/Complete';
 
 function SurveyLoader({ children }) {
+  const location = useLocation();
   const surveyId = useSurveyStore((s) => s.surveyId);
   const setSurveyData = useSurveyStore((s) => s.setSurveyData);
   const loading = useSurveyStore((s) => !s.surveyConfig);
 
   useEffect(() => {
-    if (!surveyId) {
-      const path = window.location.pathname.split('/')[1];
-      fetchSurvey(path).then((data) => setSurveyData(data));
+    const urlSurveyId = location.pathname.split('/')[1];
+    if (!urlSurveyId) return;
+    if (!surveyId || surveyId !== urlSurveyId) {
+      fetchSurvey(urlSurveyId).then((data) => setSurveyData(data));
     }
-  }, [surveyId, setSurveyData]);
+  }, [location.pathname, surveyId, setSurveyData]);
 
   if (loading) {
     return (
