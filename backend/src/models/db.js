@@ -54,28 +54,10 @@ db.exec(`
     UNIQUE(submission_id, question_id)
   );
 
-  -- 转录任务队列表
-  CREATE TABLE IF NOT EXISTS transcription_queue (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    submission_id   TEXT NOT NULL,
-    question_id     TEXT NOT NULL,
-    recording_id    INTEGER NOT NULL,
-    status          TEXT NOT NULL DEFAULT 'pending',
-    result          TEXT,
-    error           TEXT,
-    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (submission_id) REFERENCES submissions(submission_id),
-    FOREIGN KEY (recording_id) REFERENCES recordings(id),
-    UNIQUE(submission_id, question_id)
-  );
-
   -- 索引
   CREATE INDEX IF NOT EXISTS idx_submissions_survey ON submissions(survey_id);
   CREATE INDEX IF NOT EXISTS idx_submissions_time ON submissions(submitted_at);
   CREATE INDEX IF NOT EXISTS idx_recordings_submission ON recordings(submission_id);
-  CREATE INDEX IF NOT EXISTS idx_transcription_status ON transcription_queue(status);
-  CREATE INDEX IF NOT EXISTS idx_transcription_submission ON transcription_queue(submission_id);
 `);
 
 export default db;
