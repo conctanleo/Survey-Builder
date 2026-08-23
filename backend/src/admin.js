@@ -19,12 +19,15 @@ app.use(express.json());
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
-app.use((req, res, next) => {
-  if (!ADMIN_PASSWORD) {
-    console.warn('[Admin] ADMIN_PASSWORD 未设置，管理后台无认证保护！');
-    return next();
-  }
+// 未设置密码时拒绝启动（fail-closed），避免管理端裸奔在公网
+if (!ADMIN_PASSWORD) {
+  console.error('[Admin] ADMIN_PASSWORD 未设置，管理后台拒绝启动。');
+  console.error('[Admin] 请设置环境变量 ADMIN_PASSWORD 后再启动（参见 .env.example），例如：');
+  console.error('[Admin]   ADMIN_PASSWORD=你的密码 node backend/src/admin.js');
+  process.exit(1);
+}
 
+app.use((req, res, next) => {
   const auth = req.headers.authorization;
   if (!auth || !auth.startsWith('Basic ')) {
     res.setHeader('WWW-Authenticate', 'Basic realm="Voice Survey Admin"');

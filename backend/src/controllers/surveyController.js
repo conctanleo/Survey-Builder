@@ -6,6 +6,9 @@ import { v4 as uuidv4 } from 'uuid';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// 所有会拼入文件系统路径的 ID 只允许安全字符，防止路径遍历（含 URL 编码的 ../、\ 等）
+const SAFE_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
 function getExtensionFromMime(mimeType) {
   if (!mimeType) return 'webm';
   if (mimeType.includes('webm')) return 'webm';
@@ -41,8 +44,12 @@ export async function uploadRecording(req, res, next) {
       return res.status(400).json({ error: '未找到录音文件' });
     }
 
+    if (!SAFE_ID_PATTERN.test(surveyId) || !SAFE_ID_PATTERN.test(questionId)) {
+      return res.status(400).json({ error: '无效的问卷或题目 ID' });
+    }
+
     let submissionId = req.headers['x-submission-id'];
-    if (submissionId && /[/\\]/.test(submissionId)) {
+    if (submissionId && !SAFE_ID_PATTERN.test(submissionId)) {
       return res.status(400).json({ error: '无效的 submission ID' });
     }
     if (!submissionId) {

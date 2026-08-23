@@ -1,7 +1,9 @@
 import client from './client';
 import { mockSurvey } from './mock';
 
-const USE_MOCK = !import.meta.env.VITE_API_BASE_URL;
+// mock 仅用于本地开发（npm run dev 且未配置 API 地址）；
+// 生产构建（vite build）始终走真实 API，client 的 baseURL 默认 '/api'（由 nginx 反代）
+const USE_MOCK = import.meta.env.DEV && !import.meta.env.VITE_API_BASE_URL;
 
 export async function fetchSurvey(surveyId) {
   if (USE_MOCK) return { ...mockSurvey, surveyId };

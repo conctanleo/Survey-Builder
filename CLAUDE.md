@@ -89,10 +89,11 @@ recordings   (id PK, submission_id FK, question_id, file_path, mime_type, durati
 
 ## 管理后台（端口 3001）
 
+- 认证：HTTP Basic Auth。**必须**设置环境变量 `ADMIN_PASSWORD`（可选 `ADMIN_USERNAME`，默认 `admin`），未设置时服务拒绝启动（fail-closed）
 - 问卷列表：显示所有问卷，支持一键生成二维码
 - 二维码生成：`GET /api/qrcode/:surveyId?host=...` 返回 PNG 图片，可自定义 host 地址
 - 提交记录 + 录音文件查看
-- 启动：`node backend/src/admin.js`
+- 启动：`ADMIN_PASSWORD=xxx node backend/src/admin.js`（PM2：`ADMIN_PASSWORD=xxx pm2 start ecosystem.config.cjs`）
 
 ## 录音兼容性
 
