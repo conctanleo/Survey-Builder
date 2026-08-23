@@ -60,7 +60,10 @@ export default function useAudioRecorder() {
   }, []);
 
   const start = useCallback(async () => {
+    // 重入守卫：getUserMedia + 1 秒麦克风检测期间阻止二次点击并发启动
+    // （否则会泄漏第一套 MediaStream/AudioContext，且两个 onstop 互相覆盖 blob）
     if (startingRef.current) return;
+    startingRef.current = true;
     try {
       setError(null);
 

@@ -30,17 +30,19 @@ src/                            # 前端
 
 backend/
 ├── src/
-│   ├── index.js                # Express 入口，端口 3000
+│   ├── index.js                # Express 入口，端口 3000（不对外暴露录音文件）
 │   ├── routes/surveys.js       # API 路由定义
-│   ├── controllers/surveyController.js  # 业务逻辑
-│   ├── models/db.js            # SQLite 连接 + 建表
+│   ├── controllers/surveyController.js  # 业务逻辑（录音写入 <仓库根>/data/recordings/）
+│   ├── models/db.js            # SQLite 连接 + 建表 + 遗留表清理
 │   ├── middleware/upload.js    # multer（内存模式，10MB 限制，仅 audio/*）
 │   ├── middleware/errorHandler.js       # 统一错误处理
-│   └── admin.js                # 管理后台（端口 3001）：问卷列表 + 二维码生成 + 提交/录音查看
+│   └── admin.js                # 管理后台（端口 3001）：问卷 CRUD + 二维码 + 提交/录音查看（认证）
 ├── scripts/init-db.js          # 初始化示例问卷数据
 └── data/
-    ├── surveys.db              # SQLite 数据库
-    └── recordings/             # 录音文件存储目录
+    └── surveys.db              # SQLite 数据库
+
+data/
+└── recordings/                 # 录音文件存储目录（注意：在仓库根目录，不在 backend/ 下）
 ```
 
 ## 页面路由
@@ -67,7 +69,7 @@ backend/
 - Content-Type: `multipart/form-data`，字段名 `recording`
 - 请求头 `X-Submission-Id` 关联录音与提交（未提供则生成临时 ID）
 - 后端根据 `Content-Type` 判断格式，自动选择扩展名（webm/m4a/ogg）
-- 文件存储在 `data/recordings/{surveyId}/{submissionId}/{questionId}.{ext}`
+- 文件存储在**仓库根目录** `data/recordings/{surveyId}/{submissionId}/{questionId}.{ext}`（注意不在 `backend/data/` 下，数据库才在 `backend/data/`）
 
 ### POST /api/surveys/:surveyId/submit — 提交问卷
 
@@ -92,7 +94,8 @@ recordings   (id PK, submission_id FK, question_id, file_path, mime_type, durati
 - 认证：HTTP Basic Auth。**必须**设置环境变量 `ADMIN_PASSWORD`（可选 `ADMIN_USERNAME`，默认 `admin`），未设置时服务拒绝启动（fail-closed）
 - 问卷列表：显示所有问卷，支持一键生成二维码
 - 二维码生成：`GET /api/qrcode/:surveyId?host=...` 返回 PNG 图片，可自定义 host 地址
-- 提交记录 + 录音文件查看
+- 提交记录 + 录音文件查看（录音经认证接口 `GET /api/recordings/file/:submissionId/:questionId` 流式播放，不对公网静态暴露）
+- 问卷 CRUD 与数据导出（CSV/XLSX/JSON + 录音 zip）
 - 启动：`ADMIN_PASSWORD=xxx node backend/src/admin.js`（PM2：`ADMIN_PASSWORD=xxx pm2 start ecosystem.config.cjs`）
 
 ## 录音兼容性

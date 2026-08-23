@@ -33,28 +33,34 @@ export default function Survey() {
   const isPaged = config?.displayMode !== 'scroll';
   const isLast = currentIndex === questions.length - 1;
 
-  const handleNext = async () => {
+  const handleSubmit = async () => {
+    try {
+      console.log('Submitting with submissionId:', submissionId);
+      await submitSurvey(surveyId, { userInfo, answers, recordingDurations, submissionId });
+      navigate(`/${surveyId}/complete`);
+    } catch (error) {
+      message.error('提交失败，请重试');
+      console.error('Submit error:', error);
+    }
+  };
+
+  const handleNext = () => {
     if (isLast) {
-      try {
-        console.log('Submitting with submissionId:', submissionId);
-        await submitSurvey(surveyId, { userInfo, answers, recordingDurations, submissionId });
-        navigate(`/${surveyId}/complete`);
-      } catch (error) {
-        message.error('提交失败，请重试');
-        console.error('Submit error:', error);
-      }
+      handleSubmit();
     } else {
       nextQuestion();
     }
   };
 
-  const handleVoiceComplete = async (blob, duration) => {
-    setRecordingBlob(question.id, blob);
-    setRecordingDuration(question.id, duration);
-    setAnswer(question.id, true);
+  // scroll 模式下所有题目同时挂载，必须用传入的 questionId 定位，
+  // 不能用 currentIndex 对应的题目（那是分页模式的概念）
+  const handleVoiceComplete = async (questionId, blob, duration) => {
+    setRecordingBlob(questionId, blob);
+    setRecordingDuration(questionId, duration);
+    setAnswer(questionId, true);
 
     try {
-      const result = await uploadRecording(surveyId, question.id, blob);
+      const result = await uploadRecording(surveyId, questionId, blob);
       console.log('Recording upload result:', result);
       if (result.submissionId) {
         setSubmissionId(result.submissionId);
@@ -65,15 +71,15 @@ export default function Survey() {
     }
   };
 
-  const handleVoiceReset = () => {
-    setRecordingBlob(question.id, null);
-    setRecordingDuration(question.id, 0);
-    setAnswer(question.id, null);
+  const handleVoiceReset = (questionId) => {
+    setRecordingBlob(questionId, null);
+    setRecordingDuration(questionId, 0);
+    setAnswer(questionId, null);
   };
 
   const renderQuestion = (q) => {
     switch (q.type) {
-      case 'voice': return <VoiceRecorder questionId={q.id} onComplete={handleVoiceComplete} onReset={handleVoiceReset} />;
+      case 'voice': return <VoiceRecorder questionId={q.id} onComplete={(blob, duration) => handleVoiceComplete(q.id, blob, duration)} onReset={() => handleVoiceReset(q.id)} />;
       case 'choice': return <ChoiceQuestion options={q.options} multiple={q.multiple} value={answers[q.id]} onChange={(val) => setAnswer(q.id, val)} />;
       case 'text': return <TextQuestion value={answers[q.id] || ''} onChange={(val) => setAnswer(q.id, val)} placeholder={q.placeholder} maxLength={q.maxLength} />;
       default: return null;
@@ -93,7 +99,7 @@ export default function Survey() {
             </div>
           ))}
         </div>
-        <button className={styles.submitBtn} onClick={handleNext}>提交问卷</button>
+        <button className={styles.submitBtn} onClick={handleSubmit}>提交问卷</button>
       </GradientBackground>
     );
   }

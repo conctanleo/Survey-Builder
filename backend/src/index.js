@@ -1,11 +1,8 @@
 import express from 'express';
 import cors from 'cors';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import surveysRouter from './routes/surveys.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -13,8 +10,8 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// 静态文件服务（录音文件）
-app.use('/recordings', express.static(path.join(__dirname, '../data/recordings')));
+// 注意：录音文件（受访者声纹 PII）不在公网静态暴露，
+// 收听请走管理后台的认证接口 /api/recordings/file/...（admin.js）
 
 // 路由
 app.use('/api/surveys', surveysRouter);

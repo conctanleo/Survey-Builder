@@ -193,6 +193,26 @@ app.get('/api/recordings', (req, res) => {
   res.json(rows);
 });
 
+// 录音音频文件流式播放（受上方全局 Basic 认证保护；
+// 主服务 3000 端口不再静态暴露 /recordings，收听统一走此接口）
+const MIME_BY_EXT = { '.webm': 'audio/webm', '.m4a': 'audio/mp4', '.ogg': 'audio/ogg' };
+app.get('/api/recordings/file/:submissionId/:questionId', (req, res) => {
+  const { submissionId, questionId } = req.params;
+  if (!/^[a-zA-Z0-9_-]+$/.test(submissionId) || !/^[a-zA-Z0-9_-]+$/.test(questionId)) {
+    return res.status(400).json({ error: '无效的 ID' });
+  }
+  const rec = db.prepare('SELECT * FROM recordings WHERE submission_id = ? AND question_id = ?')
+    .get(submissionId, questionId);
+  if (!rec) return res.status(404).json({ error: '录音不存在' });
+
+  const fullPath = path.join(__dirname, '../../data', rec.file_path);
+  if (!fs.existsSync(fullPath)) return res.status(404).json({ error: '录音文件缺失' });
+
+  // 不信任 DB 中客户端上报的 MIME，按安全扩展名映射
+  res.setHeader('Content-Type', MIME_BY_EXT[path.extname(fullPath).toLowerCase()] || 'application/octet-stream');
+  res.sendFile(fullPath);
+});
+
 // ── API: 二维码 ──
 
 app.get('/api/qrcode/:surveyId', async (req, res) => {
@@ -698,14 +718,15 @@ app.get('/', (req, res) => {
     }
 
     function renderRecordings(recordings) {
-      let html = '<table><tr><th>ID</th><th>Question</th><th>文件路径</th><th>MIME类型</th><th>文件大小</th></tr>';
+      let html = '<table><tr><th>ID</th><th>Question</th><th>播放</th><th>文件路径</th><th>MIME类型</th><th>文件大小</th></tr>';
       if (recordings.length === 0) {
-        html += '<tr><td colspan="5" class="empty">暂无录音文件</td></tr>';
+        html += '<tr><td colspan="6" class="empty">暂无录音文件</td></tr>';
       } else {
         recordings.forEach(r => {
           html += '<tr>';
           html += '<td>' + r.id + '</td>';
           html += '<td>' + esc(r.question_id) + '</td>';
+          html += '<td><audio controls preload="none" style="height:30px;vertical-align:middle;" src="/api/recordings/file/' + encodeURIComponent(r.submission_id) + '/' + encodeURIComponent(r.question_id) + '"></audio></td>';
           html += '<td>' + esc(r.file_path) + '</td>';
           html += '<td>' + esc(r.mime_type) + '</td>';
           html += '<td>' + (r.file_size / 1024).toFixed(1) + ' KB</td>';

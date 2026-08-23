@@ -60,4 +60,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_recordings_submission ON recordings(submission_id);
 `);
 
+// 迁移清理：STT 功能已移除，但旧数据库中残留的 transcription_queue 表
+// 仍以外键引用 submissions，会导致删除问卷时 FOREIGN KEY 约束失败
+db.exec('DROP TABLE IF EXISTS transcription_queue');
+
 export default db;
