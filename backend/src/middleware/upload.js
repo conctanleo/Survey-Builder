@@ -6,7 +6,9 @@ const fileFilter = (req, file, cb) => {
   if (file.mimetype.startsWith('audio/')) {
     cb(null, true);
   } else {
-    cb(new Error('只支持音频文件'), false);
+    const err = new Error('只支持音频文件');
+    err.statusCode = 400; // 客户端输入问题，返回 4xx 而非 500
+    cb(err, false);
   }
 };
 

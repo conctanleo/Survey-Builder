@@ -12,8 +12,8 @@ export async function fetchSurvey(surveyId) {
 }
 
 export async function submitSurvey(surveyId, payload) {
-  console.log('[API] submitSurvey called with payload:', JSON.stringify(payload));
-  if (USE_MOCK) { console.log('Mock submit:', surveyId, payload); return { success: true }; }
+  // 不把 payload（含姓名/手机号等 PII）打进控制台日志
+  if (USE_MOCK) { console.log('Mock submit:', surveyId, Object.keys(payload)); return { success: true }; }
   const { data } = await client.post(`/surveys/${surveyId}/submit`, payload);
   return data;
 }

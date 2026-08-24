@@ -145,7 +145,14 @@ export default function useAudioRecorder() {
       timerRef.current = setInterval(() => {
         const elapsed = Date.now() - startTime;
         setDuration(Math.floor(elapsed / 1000));
-        if (elapsed >= MAX_DURATION_MS) recorder.stop();
+        if (elapsed >= MAX_DURATION_MS) {
+          // 到时自动停止：先清定时器，避免每秒对已停止的 recorder 重复调 stop() 抛错
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
+          if (recorder.state === 'recording') recorder.stop();
+        }
       }, 1000);
     } catch (err) {
       setError(err.name === 'NotAllowedError' ? 'permission' : err.message);

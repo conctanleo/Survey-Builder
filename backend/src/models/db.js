@@ -64,4 +64,12 @@ db.exec(`
 // 仍以外键引用 submissions，会导致删除问卷时 FOREIGN KEY 约束失败
 db.exec('DROP TABLE IF EXISTS transcription_queue');
 
+// 迁移：提交状态列。pending = 仅上传过录音的占位行（用户从未点击提交），
+// submitted = 正式提交。存量行一律视为 submitted。
+try {
+  db.exec("ALTER TABLE submissions ADD COLUMN status TEXT NOT NULL DEFAULT 'submitted'");
+} catch (err) {
+  if (!/duplicate column/i.test(err.message)) throw err;
+}
+
 export default db;

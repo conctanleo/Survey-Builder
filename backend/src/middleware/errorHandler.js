@@ -11,7 +11,8 @@ export function errorHandler(err, req, res, next) {
 
   // 其他错误
   const statusCode = err.statusCode || 500;
-  const message = err.message || '服务器内部错误';
+  // 5xx 不回显内部错误细节（可能包含绝对路径、SQLite 报错等），只记服务端日志
+  const message = statusCode >= 500 ? '服务器内部错误' : (err.message || '请求失败');
 
   res.status(statusCode).json({ error: message });
 }

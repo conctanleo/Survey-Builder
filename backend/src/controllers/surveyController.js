@@ -17,6 +17,14 @@ function getExtensionFromMime(mimeType) {
   return 'webm';
 }
 
+// 必答题是否已作答（与服务端校验保持一致）
+function isAnswered(question, answers) {
+  const a = answers ? answers[question.id] : undefined;
+  if (question.type === 'voice') return a === true;
+  if (Array.isArray(a)) return a.length > 0;
+  return typeof a === 'string' && a.trim() !== '';
+}
+
 export function getSurvey(req, res, next) {
   try {
     const { surveyId } = req.params;
@@ -56,6 +64,15 @@ export async function uploadRecording(req, res, next) {
       submissionId = `temp_${uuidv4()}`;
     }
 
+    // 校验归属：客户端提供的 submissionId 若属于其它问卷，拒绝挂载，
+    // 防止跨问卷污染/覆盖他人提交（IDOR）
+    if (submissionId) {
+      const owned = db.prepare('SELECT survey_id FROM submissions WHERE submission_id = ?').get(submissionId);
+      if (owned && owned.survey_id !== surveyId) {
+        return res.status(400).json({ error: 'submission ID 与问卷不匹配' });
+      }
+    }
+
     const ext = getExtensionFromMime(file.mimetype);
     const recordingsDir = path.join(__dirname, '../../../data/recordings', surveyId, submissionId);
     if (!fs.existsSync(recordingsDir)) {
@@ -72,10 +89,11 @@ export async function uploadRecording(req, res, next) {
     const existing = checkStmt.get(submissionId);
 
     try {
-      // INSERT OR IGNORE 防止并发上传时 UNIQUE 约束错误
+      // INSERT OR IGNORE 防止并发上传时 UNIQUE 约束错误；
+      // 占位行标记为 pending，只有正式提交后才计入提交数/导出
       db.prepare(`
-        INSERT OR IGNORE INTO submissions (submission_id, survey_id, user_info, answers)
-        VALUES (?, ?, '{}', '{}')
+        INSERT OR IGNORE INTO submissions (submission_id, survey_id, user_info, answers, status)
+        VALUES (?, ?, '{}', '{}', 'pending')
       `).run(submissionId, surveyId);
 
       const upsertStmt = db.prepare(`
@@ -104,42 +122,56 @@ export function submitSurvey(req, res, next) {
     const { surveyId } = req.params;
     const { userInfo, answers, recordingDurations, submissionId } = req.body;
 
-    console.log('[submitSurvey] Received:', { surveyId, submissionId, userInfo });
+    // 日志不落受访者 PII（姓名/手机号）
+    console.log('[submitSurvey]', surveyId, 'submissionId:', submissionId || '(new)');
 
-    const surveyStmt = db.prepare('SELECT survey_id FROM surveys WHERE survey_id = ?');
+    const surveyStmt = db.prepare('SELECT * FROM surveys WHERE survey_id = ?');
     const survey = surveyStmt.get(surveyId);
 
     if (!survey) {
       return res.status(404).json({ error: '问卷不存在' });
     }
 
+    // 服务端必答校验（客户端校验可被绕过）
+    const questions = JSON.parse(survey.questions);
+    const missing = questions.filter(q => q.required && !isAnswered(q, answers));
+    if (missing.length > 0) {
+      return res.status(400).json({
+        error: `存在未作答的必答题：${missing.map(q => q.title || q.id).join('、')}`,
+      });
+    }
+
     // 如果提供了 submissionId（录音时创建的临时ID），则更新现有记录
     // 否则创建新的 submissionId
     const finalSubmissionId = submissionId || uuidv4();
-    console.log('[submitSurvey] finalSubmissionId:', finalSubmissionId);
 
-    const existingStmt = db.prepare('SELECT submission_id FROM submissions WHERE submission_id = ?');
+    const existingStmt = db.prepare('SELECT submission_id, survey_id FROM submissions WHERE submission_id = ?');
     const existing = existingStmt.get(finalSubmissionId);
-    console.log('[submitSurvey] existing:', existing);
+
+    // 归属校验：拒绝用其它问卷的 submissionId 覆盖他人提交（IDOR）
+    if (existing && existing.survey_id !== surveyId) {
+      return res.status(400).json({ error: 'submission ID 与问卷不匹配' });
+    }
 
     if (existing) {
       // 更新现有记录
       const updateStmt = db.prepare(`
         UPDATE submissions
-        SET user_info = ?, answers = ?, recording_durations = ?, submitted_at = CURRENT_TIMESTAMP
-        WHERE submission_id = ?
+        SET user_info = ?, answers = ?, recording_durations = ?, status = 'submitted', submitted_at = CURRENT_TIMESTAMP
+        WHERE submission_id = ? AND survey_id = ?
       `);
       updateStmt.run(
         JSON.stringify(userInfo || {}),
         JSON.stringify(answers || {}),
         JSON.stringify(recordingDurations || {}),
-        finalSubmissionId
+        finalSubmissionId,
+        surveyId
       );
     } else {
       // 插入新记录
       const insertStmt = db.prepare(`
-        INSERT INTO submissions (submission_id, survey_id, user_info, answers, recording_durations)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO submissions (submission_id, survey_id, user_info, answers, recording_durations, status)
+        VALUES (?, ?, ?, ?, ?, 'submitted')
       `);
       insertStmt.run(
         finalSubmissionId,

@@ -6,6 +6,9 @@ import { errorHandler } from './middleware/errorHandler.js';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// 部署在 nginx 反代之后：req.ip 取 X-Forwarded-For 首个 IP（限速用）
+app.set('trust proxy', 1);
+
 // 中间件
 app.use(cors());
 app.use(express.json());

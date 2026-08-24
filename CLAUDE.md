@@ -75,6 +75,9 @@ data/
 
 请求体：`{ userInfo, answers, recordingDurations, submissionId? }`
 
+- 服务端校验必答题（`question.required`），存在未作答的必答题时返回 400
+- 传入的 `submissionId` 若属于其它问卷返回 400（防跨问卷覆盖）
+
 - `voice` 题答案为 `true`（实际音频通过录音接口单独上传）
 - `choice` 单选：`string`，多选：`string[]`
 - `text` 题：`string`
@@ -85,9 +88,12 @@ data/
 
 ```
 surveys      (survey_id PK, config JSON, info_fields JSON, questions JSON, created_at)
-submissions  (submission_id PK, survey_id FK, user_info JSON, answers JSON, recording_durations JSON, submitted_at)
+submissions  (submission_id PK, survey_id FK, user_info JSON, answers JSON, recording_durations JSON, status, submitted_at)
 recordings   (id PK, submission_id FK, question_id, file_path, mime_type, duration, file_size, UNIQUE(submission_id, question_id))
 ```
+
+- `submissions.status`：`pending`（仅上传过录音的占位行，不计入提交数/导出）/ `submitted`（正式提交）
+- 公开写接口（上传/提交）有每 IP 每分钟 30 次的限速（内网/本机不限），超限返回 429
 
 ## 管理后台（端口 3001）
 

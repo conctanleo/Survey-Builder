@@ -162,15 +162,16 @@ app.delete('/api/surveys/:surveyId', (req, res) => {
 
 // ── API: 提交记录 ──
 
-// 获取提交记录（支持按问卷筛选）
+// 获取提交记录（支持按问卷筛选；默认只返回正式提交，?status=pending 只看占位行，?status=all 全部）
 app.get('/api/submissions', (req, res) => {
   const { surveyId } = req.query;
-  let rows;
-  if (surveyId) {
-    rows = db.prepare('SELECT * FROM submissions WHERE survey_id = ? ORDER BY submitted_at DESC').all(surveyId);
-  } else {
-    rows = db.prepare('SELECT * FROM submissions ORDER BY submitted_at DESC').all();
-  }
+  // status 仅接受白名单值，不拼接任何用户输入
+  const statusValue = { pending: 'pending', all: '%' }[req.query.status] || 'submitted';
+  const where = surveyId ? 'WHERE survey_id = ?' : 'WHERE 1=1';
+  const params = surveyId ? [surveyId] : [];
+  const rows = db.prepare(
+    `SELECT * FROM submissions ${where} AND status LIKE ? ORDER BY submitted_at DESC`
+  ).all(...params, statusValue);
   res.json(rows);
 });
 
@@ -205,7 +206,11 @@ app.get('/api/recordings/file/:submissionId/:questionId', (req, res) => {
     .get(submissionId, questionId);
   if (!rec) return res.status(404).json({ error: '录音不存在' });
 
-  const fullPath = path.join(__dirname, '../../data', rec.file_path);
+  const dataDir = path.join(__dirname, '../../data');
+  const fullPath = path.join(dataDir, rec.file_path);
+  // 防越界：历史数据里可能存在带 ../ 的 file_path（修复前入库）
+  const rel = path.relative(dataDir, fullPath);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(404).json({ error: '录音文件缺失' });
   if (!fs.existsSync(fullPath)) return res.status(404).json({ error: '录音文件缺失' });
 
   // 不信任 DB 中客户端上报的 MIME，按安全扩展名映射
@@ -244,9 +249,9 @@ app.get('/api/export/:surveyId', (req, res) => {
   const infoFields = JSON.parse(survey.info_fields);
   const voiceQuestionIds = questions.filter(q => q.type === 'voice').map(q => q.id);
 
-  // Fetch all submissions for this survey
+  // Fetch all submissions for this survey（导出只含正式提交，排除占位行）
   const submissions = db.prepare(
-    'SELECT * FROM submissions WHERE survey_id = ? ORDER BY submitted_at ASC'
+    "SELECT * FROM submissions WHERE survey_id = ? AND status = 'submitted' ORDER BY submitted_at ASC"
   ).all(surveyId);
 
   // Fetch all recordings for these submissions
@@ -261,9 +266,11 @@ app.get('/api/export/:surveyId', (req, res) => {
   }
 
   // Build recording lookup: submission_id -> question_id -> recording
-  const recordingLookup = {};
+  // 无原型对象：submission_id 来自客户端可控的 X-Submission-Id 头（如 __proto__），
+  // 普通对象字面量会把属性写到 Object.prototype 上（原型污染）
+  const recordingLookup = Object.create(null);
   allRecordings.forEach(r => {
-    if (!recordingLookup[r.submission_id]) recordingLookup[r.submission_id] = {};
+    if (!recordingLookup[r.submission_id]) recordingLookup[r.submission_id] = Object.create(null);
     recordingLookup[r.submission_id][r.question_id] = r;
   });
 
@@ -389,9 +396,14 @@ app.get('/api/export/:surveyId', (req, res) => {
   // --- Add recording files ---
   allRecordings.forEach(rec => {
     const fullPath = path.join(dataDir, rec.file_path);
-    if (fs.existsSync(fullPath)) {
-      archive.file(fullPath, { name: `recordings/${rec.submission_id}/${rec.question_id}${path.extname(rec.file_path)}` });
-    }
+    // 防越界：历史数据里可能存在带 ../ 的 file_path（修复前入库），跳过解析到 dataDir 之外的
+    const rel = path.relative(dataDir, fullPath);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return;
+    if (!fs.existsSync(fullPath)) return;
+    // 防 zip-slip：entry 名只保留安全字符
+    const safeSub = String(rec.submission_id).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeQid = String(rec.question_id).replace(/[^a-zA-Z0-9_-]/g, '_');
+    archive.file(fullPath, { name: `recordings/${safeSub}/${safeQid}${path.extname(rec.file_path)}` });
   });
 
   // Finalize after Excel buffer is ready

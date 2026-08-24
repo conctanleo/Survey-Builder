@@ -33,7 +33,20 @@ export default function Survey() {
   const isPaged = config?.displayMode !== 'scroll';
   const isLast = currentIndex === questions.length - 1;
 
+  const isAnswered = (q) => {
+    const a = answers[q.id];
+    if (q.type === 'voice') return a === true;
+    if (Array.isArray(a)) return a.length > 0;
+    return typeof a === 'string' && a.trim() !== '';
+  };
+
   const handleSubmit = async () => {
+    // 必答题校验：scroll 模式检查全部，paged 模式由 handleNext 逐题拦截
+    const missing = questions.filter(q => q.required && !isAnswered(q));
+    if (missing.length > 0) {
+      message.warning(`还有 ${missing.length} 道必答题未完成（${missing[0].title}${missing.length > 1 ? ' 等' : ''}）`);
+      return;
+    }
     try {
       console.log('Submitting with submissionId:', submissionId);
       await submitSurvey(surveyId, { userInfo, answers, recordingDurations, submissionId });
@@ -45,6 +58,11 @@ export default function Survey() {
   };
 
   const handleNext = () => {
+    // 分页模式：离开当前题前拦截未作答的必答题
+    if (question?.required && !isAnswered(question)) {
+      message.warning('请先完成本题再继续');
+      return;
+    }
     if (isLast) {
       handleSubmit();
     } else {
@@ -61,13 +79,14 @@ export default function Survey() {
 
     try {
       const result = await uploadRecording(surveyId, questionId, blob);
-      console.log('Recording upload result:', result);
       if (result.submissionId) {
         setSubmissionId(result.submissionId);
-        console.log('Set submissionId:', result.submissionId);
       }
     } catch (error) {
+      // 上传失败不能静默：答案标记回退，告知用户重录（返回本页时会自动重试上传）
       console.error('Recording upload error:', error);
+      message.error('录音上传失败，本题答案未保存，请点击重新录音后再试');
+      setAnswer(questionId, null);
     }
   };
 

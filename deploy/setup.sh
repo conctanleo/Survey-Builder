@@ -10,6 +10,7 @@
 # 交互式步骤：
 #   - 输入域名
 #   - 输入管理员邮箱（用于 Let's Encrypt）
+#   - 设置管理后台密码（ADMIN_PASSWORD）
 
 set -euo pipefail
 
@@ -32,8 +33,12 @@ fi
 APP_DIR="/opt/voice-survey"
 read -rp "请输入域名（例：survey.example.com）: " DOMAIN
 read -rp "请输入管理员邮箱（用于 HTTPS 证书）: " EMAIL
+read -rsp "请设置管理后台密码（ADMIN_PASSWORD，输入不回显）: " ADMIN_PASSWORD
+echo ""
 
 if [[ -z "$DOMAIN" ]]; then error "域名不能为空"; fi
+if [[ -z "$ADMIN_PASSWORD" ]]; then error "管理后台密码不能为空（admin 服务未设密码会拒绝启动）"; fi
+export ADMIN_PASSWORD
 
 info "域名: $DOMAIN"
 info "应用目录: $APP_DIR"
@@ -105,9 +110,9 @@ cd backend
 node scripts/init-db.js 2>/dev/null || true
 cd ..
 
-# 确保 data 目录权限正确
-mkdir -p backend/data/recordings
-chown -R "$SUDO_USER:$SUDO_USER" backend/data
+# 确保 data 目录权限正确（数据库在 backend/data/，录音在仓库根 data/recordings/）
+mkdir -p backend/data data/recordings
+chown -R "$SUDO_USER:$SUDO_USER" backend/data data
 
 # ── 6. PM2 启动 ──
 info "启动应用服务..."
@@ -119,11 +124,20 @@ pm2 save
 info "设置 PM2 开机自启..."
 pm2 startup systemd -u "$SUDO_USER" --hp "/home/$SUDO_USER" 2>/dev/null || true
 
-# ── 7. Nginx 配置 ──
+# ── 7. HTTPS 证书（必须先于 nginx 配置：nginx -t 需要证书文件存在）──
+info "申请 Let's Encrypt 证书..."
+# standalone 模式需要 80 端口空闲
+systemctl stop nginx 2>/dev/null || true
+certbot certonly --standalone -d "$DOMAIN" --non-interactive --agree-tos --email "$EMAIL" \
+  || error "证书申请失败：请确认域名已解析到本机且 80 端口可访问后重试"
+
+# ── 8. Nginx 配置 ──
 info "配置 Nginx..."
 NGINX_CONF="/etc/nginx/sites-available/voice-survey"
 
-sed -e "s/YOUR_DOMAIN/$DOMAIN/g" "$APP_DIR/deploy/nginx.conf" > "$NGINX_CONF"
+# 替换域名并取消注释证书路径行（certonly 生成的路径与 nginx.conf 模板一致）
+sed -e "s/YOUR_DOMAIN/$DOMAIN/g" -e "s|^# *ssl_certificate|ssl_certificate|" \
+  "$APP_DIR/deploy/nginx.conf" > "$NGINX_CONF"
 
 # 启用站点
 ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/voice-survey
@@ -134,7 +148,7 @@ nginx -t || error "Nginx 配置有误，请检查 $NGINX_CONF"
 systemctl enable nginx
 systemctl reload nginx
 
-# ── 8. 防火墙 ──
+# ── 9. 防火墙 ──
 info "配置防火墙..."
 if command -v ufw &> /dev/null; then
   ufw allow 80/tcp
@@ -148,12 +162,10 @@ elif command -v firewall-cmd &> /dev/null; then
   firewall-cmd --reload
 fi
 
-# ── 9. HTTPS 证书 ──
-info "申请 Let's Encrypt 证书..."
-certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --email "$EMAIL" --redirect
-
+# ── 10. 证书自动续期 ──
 info "设置证书自动续期..."
-(crontab -l 2>/dev/null; echo "0 3 * * * certbot renew --quiet --post-hook 'systemctl reload nginx'") | sort -u | crontab -
+# standalone 续期需要临时占用 80 端口，前后停/启 nginx
+(crontab -l 2>/dev/null; echo "0 3 * * * certbot renew --quiet --pre-hook 'systemctl stop nginx' --post-hook 'systemctl start nginx'") | sort -u | crontab -
 
 # ── 完成 ──
 echo ""
@@ -167,5 +179,5 @@ echo ""
 echo "  PM2 管理：    pm2 status | pm2 logs | pm2 restart all"
 echo "  Nginx 日志：  tail -f /var/log/nginx/voice-survey.access.log"
 echo "  数据库：      $APP_DIR/backend/data/surveys.db"
-echo "  录音文件：    $APP_DIR/backend/data/recordings/"
+echo "  录音文件：    $APP_DIR/data/recordings/"
 echo "══════════════════════════════════════════════════════"
