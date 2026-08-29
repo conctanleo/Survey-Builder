@@ -26,6 +26,8 @@ module.exports = {
         // ADMIN_PASSWORD=xxx pm2 start ecosystem.config.cjs
         ADMIN_USERNAME: process.env.ADMIN_USERNAME || 'admin',
         ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
+        // 前端公开地址（二维码/链接默认指向），如 https://survey.example.com
+        ADMIN_PUBLIC_URL: process.env.ADMIN_PUBLIC_URL,
       },
       instances: 1,
       autorestart: true,

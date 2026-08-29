@@ -7,6 +7,7 @@ import archiver from 'archiver';
 import ExcelJS from 'exceljs';
 import fs from 'fs';
 import db from './models/db.js';
+import { defaultPublicHost } from './lib/publicUrl.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -225,7 +226,7 @@ app.get('/api/qrcode/:surveyId', async (req, res) => {
     const { surveyId } = req.params;
     const survey = db.prepare('SELECT survey_id FROM surveys WHERE survey_id = ?').get(surveyId);
     if (!survey) return res.status(404).json({ error: '问卷不存在' });
-    const host = req.query.host || `${req.protocol}://${req.get('host').replace(PORT.toString(), '5173')}`;
+    const host = req.query.host || process.env.ADMIN_PUBLIC_URL || defaultPublicHost(req);
     const url = `${host}/${surveyId}`;
     const qrDataUrl = await QRCode.toDataURL(url, { width: 400, margin: 2 });
     const base64 = qrDataUrl.replace(/^data:image\/png;base64,/, '');
@@ -413,6 +414,8 @@ app.get('/api/export/:surveyId', (req, res) => {
 // ── 管理页面 ──
 
 app.get('/', (req, res) => {
+  // 二维码/链接默认指向的前端地址：ADMIN_PUBLIC_URL 优先，否则按请求推断
+  const defaultQrHost = JSON.stringify(process.env.ADMIN_PUBLIC_URL || defaultPublicHost(req));
   res.send(`
 <!DOCTYPE html>
 <html>
@@ -420,6 +423,7 @@ app.get('/', (req, res) => {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>问卷管理后台</title>
+  <script>const DEFAULT_QR_HOST = ${defaultQrHost};</script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; }
@@ -808,7 +812,7 @@ app.get('/', (req, res) => {
     function showQR(surveyId, title) {
       currentSurveyId = surveyId;
       document.getElementById('qrTitle').textContent = title;
-      document.getElementById('qrHost').value = location.protocol + '//' + location.hostname + ':5173';
+      document.getElementById('qrHost').value = DEFAULT_QR_HOST;
       refreshQR();
       document.getElementById('qrModal').classList.add('active');
     }

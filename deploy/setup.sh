@@ -45,6 +45,8 @@ echo ""
 if [[ -z "$DOMAIN" ]]; then error "域名不能为空"; fi
 if [[ -z "$ADMIN_PASSWORD" ]]; then error "管理后台密码不能为空（admin 服务未设密码会拒绝启动）"; fi
 export ADMIN_PASSWORD
+# 二维码/链接默认指向的前端公开地址
+export ADMIN_PUBLIC_URL="https://$DOMAIN"
 
 info "域名: $DOMAIN"
 info "应用目录: $APP_DIR"
