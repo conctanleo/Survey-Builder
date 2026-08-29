@@ -14,6 +14,12 @@
 
 set -euo pipefail
 
+# 非交互：Ubuntu 22.04+ 的 apt 会触发 needrestart 钩子，弹出
+# "Restarting services..." 确认对话框，SSH 下可能无法输入导致卡死。
+# NEEDRESTART_MODE=a 让其自动重启服务；DEBIAN_FRONTEND 禁用所有安装弹窗。
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+
 # ── 颜色 ──
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -135,8 +141,9 @@ certbot certonly --standalone -d "$DOMAIN" --non-interactive --agree-tos --email
 info "配置 Nginx..."
 NGINX_CONF="/etc/nginx/sites-available/voice-survey"
 
-# 替换域名并取消注释证书路径行（certonly 生成的路径与 nginx.conf 模板一致）
-sed -e "s/YOUR_DOMAIN/$DOMAIN/g" -e "s|^# *ssl_certificate|ssl_certificate|" \
+# 替换域名并取消注释证书路径行（certonly 生成的路径与 nginx.conf 模板一致）。
+# 注意：模板中证书行在 server 块内有缩进，不能用 ^# 锚定行首（匹配不到）
+sed -e "s/YOUR_DOMAIN/$DOMAIN/g" -e "s|# *\(ssl_certificate\)|\1|" \
   "$APP_DIR/deploy/nginx.conf" > "$NGINX_CONF"
 
 # 启用站点
@@ -146,7 +153,8 @@ rm -f /etc/nginx/sites-enabled/default
 
 nginx -t || error "Nginx 配置有误，请检查 $NGINX_CONF"
 systemctl enable nginx
-systemctl reload nginx
+# 申请证书前 nginx 被停掉，对已停止的服务 reload 会报错：活动则 reload，否则 start
+systemctl is-active --quiet nginx && systemctl reload nginx || systemctl start nginx
 
 # ── 9. 防火墙 ──
 info "配置防火墙..."
