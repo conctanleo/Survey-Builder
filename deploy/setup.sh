@@ -161,11 +161,14 @@ systemctl is-active --quiet nginx && systemctl reload nginx || systemctl start n
 # ── 9. 防火墙 ──
 info "配置防火墙..."
 if command -v ufw &> /dev/null; then
+  # 必须先放行 SSH 再 enable：ufw 默认拒绝入站，漏掉 22 会把部署者锁在服务器外
+  ufw allow OpenSSH 2>/dev/null || ufw allow 22/tcp
   ufw allow 80/tcp
   ufw allow 443/tcp
   ufw allow 8443/tcp
   ufw --force enable 2>/dev/null || true
 elif command -v firewall-cmd &> /dev/null; then
+  firewall-cmd --permanent --add-service=ssh
   firewall-cmd --permanent --add-service=http
   firewall-cmd --permanent --add-service=https
   firewall-cmd --permanent --add-port=8443/tcp
