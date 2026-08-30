@@ -54,7 +54,7 @@ info "应用目录: $APP_DIR"
 # ── 1. 系统依赖 ──
 info "安装系统依赖..."
 apt-get update -qq
-apt-get install -y -qq curl git build-essential python3 nginx certbot python3-certbot-nginx > /dev/null
+apt-get install -y -qq curl git build-essential python3 nginx certbot python3-certbot-nginx rsync > /dev/null
 
 # ── 2. Node.js（通过 nvm）──
 if ! command -v node &> /dev/null; then
@@ -86,13 +86,22 @@ fi
 # ── 4. 项目代码 ──
 info "设置项目目录..."
 
-# 如果脚本在项目内执行，复制到 /opt；否则提示
+# 从仓库运行时把代码发布到 /opt：首次复制，之后增量更新
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 if [[ "$PROJECT_DIR" != "$APP_DIR" ]]; then
   if [[ -d "$APP_DIR" ]]; then
-    warn "$APP_DIR 已存在，将更新代码"
+    info "更新 $APP_DIR 代码（保留数据库/录音/依赖）..."
+    # --delete 清理已删除的源文件；排除运行时数据与可重建产物
+    rsync -a --delete \
+      --exclude .git \
+      --exclude node_modules \
+      --exclude backend/node_modules \
+      --exclude backend/data \
+      --exclude data \
+      --exclude dist \
+      "$PROJECT_DIR"/ "$APP_DIR"/
   else
     info "复制项目到 $APP_DIR..."
     cp -r "$PROJECT_DIR" "$APP_DIR"
